@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package proto.users.v1;
+
+
+message RegisterUserRequest {
+  int64 user_id = 1;
+  string user_name = 2;
+}
+
+message RegisterUserResponse {
+  string user_role = 1;
+}
+
+message GetUserRequest {
+  int64 user_id = 1;
+}
+message GetUserResponse {
+  int64 user_id = 1;
+  string user_name = 2;
+  string user_role = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+message DeleteUserRequest {
+  int64 user_id = 1;
+}
+message DeleteUserResponse {
+  bool success = 1;
+}
+message UpdateUserRoleRequest {
+  int64 user_id = 1;
+  string new_user_role = 2;
+}
+message UpdateUserRoleResponse {
+  int64 user_id = 1;
+  string user_name = 2;
+  string user_role = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+message User {
+  int64 user_id = 1;
+  string user_name = 2;
+  string user_role = 3;
+  string created_at = 4;
+  string updated_at = 5;
+}
+message ListAllUsersRequest {
+  int64 limit = 1;
+  int64 offset = 2;
+}
+message ListAllUsersResponse {
+  repeated User users = 1;
+}
+
+service UsersService {
+  rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse);
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  rpc ListAllUsers(ListAllUsersRequest) returns (ListAllUsersResponse);
+  rpc UpdateUserRole(UpdateUserRoleRequest) returns (UpdateUserRoleResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+}

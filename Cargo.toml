@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["database", "max", "proto", "server", "shared", "telegram"]
+
+[workspace.dependencies]
+# errors
+anyhow = "1"
+
+# async
+tokio = { version = "1.46", features = ["full"] }
+
+# grpc
+tonic = { git = "https://github.com/hyperium/tonic" }
+
+# logs
+tracing = "0.1"
+tracing-subscriber = "0.3"
