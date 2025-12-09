@@ -1,9 +1,13 @@
-use tracing::info;
+use tracing::{debug, info};
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    if std::env::var("ALF_PRODUCTION").is_ok() {
+        alfred::logger::init(tracing::Level::INFO);
+    } else {
+        alfred::logger::init(tracing::Level::DEBUG);
+    }
     info!("Hello from Alfred!");
     let settings = alfred::settings::init();
-    info!("Settings:\n{settings:#?}");
+    debug!("Settings:\n{settings:#?}");
 }
