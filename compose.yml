@@ -1,0 +1,26 @@
+services:
+    surrealdb:
+        env_file:
+            - .env
+        user: $DB_USER
+        entrypoint:
+            - /surreal
+            - start
+            - --user
+            - $DB_USER
+            - --pass
+            - $DB_PASSWORD
+            - surrealkv://data/surrealdb.db
+        image: surrealdb/surrealdb:latest
+        ports:
+            - 8008:8000
+        volumes:
+            - surrealdb_data:/data
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "/surreal", "isready"]
+            retries: 3
+            interval: 5s
+            timeout: 1s
+volumes:
+    surrealdb_data:
