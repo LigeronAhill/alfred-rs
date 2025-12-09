@@ -1,0 +1,20 @@
+[package]
+name = "surdb"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde = { workspace = true, features = ["derive"] }
+surrealdb = "2.4.0"
+thiserror.workspace = true
+shared = { path = "../shared" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[profile.release]
+lto = true
+strip = true
+opt-level = 3
+panic = 'abort'
+codegen-units = 1

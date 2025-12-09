@@ -1,0 +1,25 @@
+services:
+    surrealdb:
+        env_file:
+            - .env
+        user: $DB_USER
+        entrypoint:
+            - /surreal
+            - start
+            - --user
+            - $DB_USER
+            - --pass
+            - $DB_PASSWORD
+            # Указываем путь к файлу базы данных
+            - surrealkv://data/surrealdb.db
+        image: surrealdb/surrealdb:latest
+        ports:
+            - 8008:8000
+        volumes:
+            # Создаем том для хранения данных
+            - surrealdb_data:/data
+        restart: unless-stopped # Опционально: автоматически перезапускать контейнер
+
+# Объявляем том
+volumes:
+    surrealdb_data:

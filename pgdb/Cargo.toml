@@ -1,0 +1,34 @@
+[package]
+name = "pgdb"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+uuid = { workspace = true, features = ["serde"] }
+chrono = { workspace = true, features = ["serde"] }
+shared = { path = "../shared" }
+tracing.workspace = true
+argon2 = "0.5.3"
+
+[dependencies.sqlx]
+version = "0.8.6"
+default-features = false
+features = [
+	"runtime-tokio",
+	"tls-rustls",
+	"postgres",
+	"macros",
+	"migrate",
+	"uuid",
+	"chrono",
+]
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
+
+[profile.dev.package.sqlx-macros]
+opt-level = 3
