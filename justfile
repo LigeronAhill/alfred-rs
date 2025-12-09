@@ -60,3 +60,7 @@ deps-check:
 # <---------- PREPARE FOR PUSH ---------->
 # Prepare for push
 prepare: test fmt lint unused sec deps-check
+
+# <---------- RUN ---------->
+run:
+	cargo run
