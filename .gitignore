@@ -2,6 +2,8 @@
 .env
 .cargo
 settings.toml
+.idea
+.zed
 
 
 # Added by cargo

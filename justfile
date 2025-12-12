@@ -16,6 +16,22 @@ db-start:
 db-stop:
 	docker-compose down
 
+# add migration
+add-migr NAME:
+    sqlx migrate add {{NAME}} -r
+
+# apply migrations
+run-migr:
+    sqlx migrate run
+
+# revert migration
+revert-migr:
+    sqlx migrate revert
+
+# offline mode for sqlx
+db-offline:
+    cargo sqlx prepare -- --all-targets --all-features
+
 # <---------- TESTS ---------->
 # Run tests
 test:
@@ -23,7 +39,7 @@ test:
 
 # Test coverage
 cover:
-	cargo llvm-cov
+	cargo llvm-cov --no-cfg-coverage
 
 # <---------- DEPENDENCIES ---------->
 # Install dependencies
@@ -59,8 +75,9 @@ deps-check:
 
 # <---------- PREPARE FOR PUSH ---------->
 # Prepare for push
-prepare: test fmt lint unused sec deps-check
+prepare: test fmt lint unused sec deps-check db-offline
 
 # <---------- RUN ---------->
+# run server
 run:
 	cargo run
