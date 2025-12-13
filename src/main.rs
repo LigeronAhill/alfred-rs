@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use alfred::AppResult;
 use alfred::storage::PgStorage;
 
@@ -10,7 +12,15 @@ async fn main() -> AppResult<()> {
     }
     tracing::info!("Hello from Alfred!");
     let settings = alfred::settings::init("settings.toml");
-    let pg_storage = PgStorage::init(settings.database_settings).await?;
+    let db_url = settings.database_settings.db_url();
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(settings.database_settings.max_connections.unwrap_or(8))
+        .idle_timeout(Duration::from_secs(
+            settings.database_settings.idle_timeout.unwrap_or(30),
+        ))
+        .connect(db_url.as_ref())
+        .await?;
+    let pg_storage = PgStorage::init(pool).await?;
     pg_storage.close().await;
     Ok(())
 }
