@@ -1,18 +1,19 @@
 //! Репозиторий пользователей для PostgreSQL
 //!
 //! Этот модуль содержит реализацию репозитория пользователей
-//! для работы с базой данных PostgreSQL.
-
+//! для работы с базой данных PostgreSQL. Предоставляет полный набор
+//! CRUD операций с поддержкой фильтрации, пагинации и поиска.
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use sqlx::{Postgres, QueryBuilder};
 use tracing::instrument;
 
 use crate::{
     AppError, AppResult,
     crypto::{hash_password, verify_password},
     models::{SigninData, SignupData, User, UserInfo, UserRole},
-    storage::{PgStorage, UsersRepository},
+    storage::{PgStorage, UsersRepository, users::UsersFilter},
 };
 
 #[async_trait]
@@ -52,23 +53,28 @@ impl UsersRepository for PgStorage {
         let res = User::from((user, info.into()));
         Ok(res)
     }
-
-    /// Получает список пользователей с пагинацией
+    /// Получает список пользователей с поддержкой фильтрации и пагинации
     ///
     /// # Аргументы
     ///
-    /// * `page` - Номер страницы (начиная с 1)
-    /// * `per_page` - Количество пользователей на странице
+    /// * `filter` - Параметры фильтрации и пагинации (`UsersFilter`)
     ///
     /// # Возвращает
     ///
-    /// * `AppResult<Vec<User>>` - Список пользователей или ошибку
+    /// * `AppResult<Vec<User>>` - Список пользователей, соответствующих критериям фильтрации
+    ///
+    /// # Особенности
+    ///
+    /// - Поддерживает фильтрацию по роли (`UserRole`)
+    /// - Поддерживает поиск по email, имени пользователя, имени и фамилии
+    /// - Результаты сортируются по дате создания (DESC)
+    /// - Используется регистронезависимый поиск (ILIKE)
     #[instrument(name = "list users", skip(self))]
-    async fn list(&self, page: u32, per_page: u32) -> AppResult<Vec<User>> {
-        let offset = (page.saturating_sub(1) * per_page) as i64;
-        let users_with_info = sqlx::query!(
-            r#"
-			SELECT
+    async fn list(&self, filter: UsersFilter) -> AppResult<Vec<User>> {
+        use sqlx::Row;
+        let offset = (filter.page().saturating_sub(1) * filter.per_page()) as i64;
+        let mut qb: QueryBuilder<Postgres> = sqlx::QueryBuilder::new(
+            r#"SELECT
 				u.user_id,
 				u.email,
 				u.password_hash,
@@ -85,39 +91,74 @@ impl UsersRepository for PgStorage {
 				ui.created as info_created,
 				ui.updated as info_updated
 			FROM users u
-			LEFT JOIN user_infos ui ON u.user_id = ui.user_id
-			ORDER BY u.created DESC
-			LIMIT $1 OFFSET $2
-			"#,
-            per_page as i64,
-            offset
-        )
-        .fetch_all(&self.pool)
-        .await?;
+			LEFT JOIN user_infos ui ON u.user_id = ui.user_id "#,
+        );
+
+        let mut has_conditions = false;
+
+        if let Some(role) = filter.role() {
+            if !has_conditions {
+                qb.push(" WHERE ");
+                has_conditions = true;
+            } else {
+                qb.push(" AND ");
+            }
+            qb.push("u.role = ");
+            qb.push_bind(role.to_string());
+        }
+
+        if let Some(q) = filter.search_string() {
+            let pattern = format!("%{q}%");
+            if !has_conditions {
+                qb.push(" WHERE ");
+            } else {
+                qb.push(" AND ");
+            }
+            qb.push("(");
+            qb.push("u.email ILIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(" OR ui.username ILIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(" OR ui.first_name ILIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(" OR ui.last_name ILIKE ");
+            qb.push_bind(pattern.clone());
+            qb.push(")");
+        }
+
+        qb.push(" ORDER BY u.created DESC");
+        qb.push(" LIMIT ");
+        qb.push_bind(filter.per_page() as i64);
+        qb.push(" OFFSET ");
+        qb.push_bind(offset);
+
+        let query = qb.build();
 
         let mut result = Vec::new();
 
+        let users_with_info = query.fetch_all(&self.pool).await?;
+
         for row in users_with_info {
             let user_dto = UserDTO {
-                user_id: row.user_id,
-                email: row.email,
-                password_hash: row.password_hash,
-                role: row.role,
-                created: row.created,
-                updated: row.updated,
+                user_id: row.get("user_id"),
+                email: row.get("email"),
+                password_hash: row.get("password_hash"),
+                role: row.get("role"),
+                created: row.get("created"),
+                updated: row.get("updated"),
             };
 
             let info_dto = UserInfoDTO {
-                info_id: row.info_id,
-                user_id: row.user_id,
-                first_name: row.first_name,
-                middle_name: row.middle_name,
-                last_name: row.last_name,
-                username: row.username,
-                avatar_url: row.avatar_url,
-                bio: row.bio,
-                created: row.info_created,
-                updated: row.info_updated,
+                info_id: row.get("info_id"),
+                user_id: row.get("user_id"),
+                first_name: row.get("first_name"),
+                middle_name: row.get("middle_name"),
+                last_name: row.get("last_name"),
+                username: row.get("username"),
+                avatar_url: row.get("avatar_url"),
+                bio: row.get("bio"),
+                created: row.get("info_created"),
+                updated: row.get("info_updated"),
             };
 
             result.push(User::from((user_dto, info_dto.into())));
@@ -125,18 +166,59 @@ impl UsersRepository for PgStorage {
 
         Ok(result)
     }
-
-    /// Получает общее количество пользователей в базе данных
+    /// Получает общее количество пользователей с учетом фильтров
+    ///
+    /// # Аргументы
+    ///
+    /// * `filter` - Параметры фильтрации (`UsersFilter`)
     ///
     /// # Возвращает
     ///
-    /// * `AppResult<u32>` - Общее количество пользователей
+    /// * `AppResult<u32>` - Общее количество пользователей, соответствующих критериям
     #[instrument(name = "count users", skip(self))]
-    async fn total(&self) -> AppResult<u32> {
-        let res = sqlx::query_scalar!("SELECT COUNT(*) FROM users")
+    async fn total(&self, filter: UsersFilter) -> AppResult<u32> {
+        use sqlx::Row;
+        let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+            "SELECT COUNT(*) as total FROM users u LEFT JOIN user_infos ui ON u.user_id = ui.user_id",
+        );
+
+        let mut has_conditions = false;
+
+        if let Some(role) = filter.role {
+            query_builder.push(" WHERE ");
+            has_conditions = true;
+            query_builder.push("u.role = ");
+            query_builder.push_bind(role.to_string());
+        }
+
+        if let Some(search) = &filter.search_string {
+            let search_pattern = format!("%{}%", search);
+
+            if !has_conditions {
+                query_builder.push(" WHERE ");
+            } else {
+                query_builder.push(" AND ");
+            }
+
+            query_builder.push("(");
+            query_builder.push("u.email ILIKE ");
+            query_builder.push_bind(search_pattern.clone());
+            query_builder.push(" OR ui.username ILIKE ");
+            query_builder.push_bind(search_pattern.clone());
+            query_builder.push(" OR ui.first_name ILIKE ");
+            query_builder.push_bind(search_pattern.clone());
+            query_builder.push(" OR ui.last_name ILIKE ");
+            query_builder.push_bind(search_pattern.clone());
+            query_builder.push(")");
+        }
+
+        let query = query_builder.build();
+        let row = query
             .fetch_one(&self.pool)
-            .await?;
-        Ok(res.unwrap_or(0) as u32)
+            .await
+            .map_err(|e| AppError::Custom(e.to_string()))?;
+        let t: i64 = row.get("total");
+        Ok(t as u32)
     }
 
     /// Находит пользователя по email адресу
@@ -561,7 +643,7 @@ mod tests {
     use crate::{
         AppError, AppResult,
         models::{SigninData, SignupData, User, UserInfo},
-        storage::{PgStorage, UsersRepository},
+        storage::{PgStorage, UsersRepository, users::UsersFilter},
     };
     #[sqlx::test]
     async fn create_user_success_test(pool: PgPool) -> AppResult<()> {
@@ -800,13 +882,19 @@ mod tests {
         }
 
         // Тестируем пагинацию
-        let page1 = pg_users_repo.list(1, 10).await?;
+        let page1 = pg_users_repo
+            .list(UsersFilter::builder().page(1).per_page(10).build().unwrap())
+            .await?;
         assert_eq!(page1.len(), 10);
 
-        let page2 = pg_users_repo.list(2, 10).await?;
+        let page2 = pg_users_repo
+            .list(UsersFilter::builder().page(2).per_page(10).build().unwrap())
+            .await?;
         assert_eq!(page2.len(), 5);
 
-        let page3 = pg_users_repo.list(3, 10).await?;
+        let page3 = pg_users_repo
+            .list(UsersFilter::builder().page(3).per_page(10).build().unwrap())
+            .await?;
         assert_eq!(page3.len(), 0);
 
         // Проверяем сортировку по created DESC
@@ -820,7 +908,9 @@ mod tests {
     async fn list_users_empty_test(pool: PgPool) -> AppResult<()> {
         let pg_users_repo = PgStorage::with_pool(pool);
 
-        let users = pg_users_repo.list(1, 10).await?;
+        let users = pg_users_repo
+            .list(UsersFilter::builder().page(1).per_page(10).build().unwrap())
+            .await?;
         assert!(users.is_empty());
 
         Ok(())
@@ -831,7 +921,7 @@ mod tests {
         let pg_users_repo = PgStorage::with_pool(pool);
 
         // Начальное количество
-        let initial_total = pg_users_repo.total().await?;
+        let initial_total = pg_users_repo.total(UsersFilter::default()).await?;
         assert_eq!(initial_total, 0);
 
         // Создаем пользователей
@@ -845,7 +935,7 @@ mod tests {
         }
 
         // Проверяем общее количество
-        let final_total = pg_users_repo.total().await?;
+        let final_total = pg_users_repo.total(UsersFilter::default()).await?;
         assert_eq!(final_total, 5);
 
         Ok(())

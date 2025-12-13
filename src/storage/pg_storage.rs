@@ -58,7 +58,7 @@ impl PgStorage {
     /// Метод потребляет `self` по значению, что гарантирует,
     /// что после закрытия пула объект больше не может быть использован.
     #[instrument(name = "closing pg pool", skip(self))]
-    pub async fn close(self) {
+    pub async fn close(&self) {
         self.pool.close().await;
     }
     #[cfg(test)]
