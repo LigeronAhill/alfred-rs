@@ -11,7 +11,7 @@ use tracing::instrument;
 use crate::{
     AppError, AppResult,
     crypto::{hash_password, verify_password},
-    models::{SignupData, User, UserInfo, UserRole},
+    models::{SigninData, SignupData, User, UserInfo, UserRole},
     storage::{PgStorage, UsersRepository},
 };
 
@@ -211,10 +211,10 @@ impl UsersRepository for PgStorage {
     /// # Возвращает
     ///
     /// * `AppResult<bool>` - Результат проверки пароля (true если пароль верный)
-    #[instrument(name = "verify user's password", skip_all, fields(email = %signup_data.email))]
-    async fn verify_user(&self, signup_data: SignupData) -> AppResult<bool> {
-        let user = UserDTO::get_by_email(&self.pool, &signup_data.email).await?;
-        let res = verify_password(&user.password_hash, &signup_data.password)?;
+    #[instrument(name = "verify user's password", skip_all, fields(email = %signin_data.email))]
+    async fn verify_user(&self, signin_data: SigninData) -> AppResult<bool> {
+        let user = UserDTO::get_by_email(&self.pool, &signin_data.email).await?;
+        let res = verify_password(&user.password_hash, &signin_data.password)?;
         Ok(res)
     }
 }
@@ -560,7 +560,7 @@ mod tests {
 
     use crate::{
         AppError, AppResult,
-        models::{SignupData, User, UserInfo},
+        models::{SigninData, SignupData, User, UserInfo},
         storage::{PgStorage, UsersRepository},
     };
     #[sqlx::test]
@@ -571,9 +571,13 @@ mod tests {
             password: "str0nGp@ssw0rD".to_string(),
             role: crate::models::UserRole::Guest,
         };
+        let signin_data = SigninData {
+            email: "test@example.com".to_string(),
+            password: "str0nGp@ssw0rD".to_string(),
+        };
         let created = pg_users_repo.create(signup_data.clone()).await?;
         assert_eq!(created.email, signup_data.email);
-        let verify = pg_users_repo.verify_user(signup_data.clone()).await?;
+        let verify = pg_users_repo.verify_user(signin_data.clone()).await?;
         assert!(verify);
         Ok(())
     }
@@ -600,31 +604,35 @@ mod tests {
         };
         let created = pg_users_repo.create(signup_data.clone()).await?;
         let verify_created = pg_users_repo
-            .verify_user(SignupData {
-                email: created.email,
-                password: signup_data.password.clone(),
-                role: created.role,
-            })
+            .verify_user(
+                SigninData::try_from((created.email.as_str(), signup_data.password.as_str()))
+                    .unwrap(),
+            )
             .await?;
         assert!(verify_created);
         let retrieved_by_id = pg_users_repo.get(created.user_id).await?;
         assert_eq!(retrieved_by_id.email, signup_data.email);
         let verify_retrieved_by_id = pg_users_repo
-            .verify_user(SignupData {
-                email: retrieved_by_id.email,
-                password: signup_data.password.clone(),
-                role: retrieved_by_id.role,
-            })
+            .verify_user(
+                SigninData::try_new(
+                    retrieved_by_id.email.as_str(),
+                    signup_data.password.as_str(),
+                )
+                .unwrap(),
+            )
             .await?;
         assert!(verify_retrieved_by_id);
         let retrieved_by_email = pg_users_repo.find_by_email(&signup_data.email).await?;
         assert_eq!(retrieved_by_email.email, signup_data.email);
         let verify_retrieved_by_email = pg_users_repo
-            .verify_user(SignupData {
-                email: retrieved_by_email.email,
-                password: signup_data.password.clone(),
-                role: retrieved_by_email.role,
-            })
+            .verify_user(
+                (
+                    retrieved_by_email.email.as_str(),
+                    signup_data.password.as_str(),
+                )
+                    .try_into()
+                    .unwrap(),
+            )
             .await?;
         assert!(verify_retrieved_by_email);
         Ok(())
@@ -857,7 +865,9 @@ mod tests {
         pg_users_repo.create(signup_data.clone()).await?;
 
         // Правильный пароль
-        let is_valid = pg_users_repo.verify_user(signup_data).await?;
+        let is_valid = pg_users_repo
+            .verify_user((signup_data.email.as_str(), password).try_into().unwrap())
+            .await?;
         assert!(is_valid);
 
         Ok(())
@@ -876,13 +886,12 @@ mod tests {
         pg_users_repo.create(signup_data.clone()).await?;
 
         // Неправильный пароль
-        let wrong_signup_data = SignupData {
+        let wrong_signin_data = SigninData {
             email: "verify@example.com".to_string(),
             password: "WrongPass123!".to_string(),
-            role: crate::models::UserRole::Guest,
         };
 
-        let is_valid = pg_users_repo.verify_user(wrong_signup_data).await?;
+        let is_valid = pg_users_repo.verify_user(wrong_signin_data).await?;
         assert!(!is_valid);
 
         Ok(())
@@ -892,13 +901,12 @@ mod tests {
     async fn verify_user_not_found_test(pool: PgPool) -> AppResult<()> {
         let pg_users_repo = PgStorage::with_pool(pool);
 
-        let signup_data = SignupData {
+        let signin_data = SigninData {
             email: "nonexistent@example.com".to_string(),
             password: "AnyPass123!".to_string(),
-            role: crate::models::UserRole::Guest,
         };
 
-        let result = pg_users_repo.verify_user(signup_data).await;
+        let result = pg_users_repo.verify_user(signin_data).await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), AppError::EntryNotFound));
 

@@ -1,7 +1,5 @@
 use crate::AppResult;
-use crate::settings::DatabaseSettings;
-use sqlx::Connection;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::{Connection, Pool, Postgres};
 use tracing::instrument;
 
 /// Хранилище данных на основе PostgreSQL
@@ -41,22 +39,11 @@ impl PgStorage {
     /// Функция логирует следующие события:
     /// * `DEBUG` - успешный ping к базе данных
     /// * `INFO` - успешная инициализация хранилища с деталями подключения
-    #[instrument(name = "initializing pg repository", skip(settings))]
-    pub async fn init(settings: DatabaseSettings) -> AppResult<Self> {
-        let db_url = settings.db_url();
-        let pool = PgPoolOptions::new()
-            .max_connections(8)
-            .connect(db_url.as_ref())
-            .await?;
+    #[instrument(name = "initializing pg repository", skip(pool))]
+    pub async fn init(pool: Pool<Postgres>) -> AppResult<Self> {
         let mut conn = pool.acquire().await?;
         conn.ping().await?;
         tracing::debug!("Ping to db successfully");
-        tracing::info!(
-            "Postgres repository initialized on 'postgres://{host}:{port}/{db}'",
-            host = settings.host,
-            port = settings.port,
-            db = settings.database
-        );
         conn.close().await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
@@ -77,5 +64,20 @@ impl PgStorage {
     #[cfg(test)]
     pub(crate) fn with_pool(pool: sqlx::PgPool) -> Self {
         Self { pool }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::PgPool;
+
+    use crate::AppResult;
+
+    #[sqlx::test]
+    async fn test_init(pool: PgPool) -> AppResult<()> {
+        let pg_storage = PgStorage::init(pool).await;
+        assert!(pg_storage.is_ok());
+        pg_storage.unwrap().close().await;
+        Ok(())
     }
 }

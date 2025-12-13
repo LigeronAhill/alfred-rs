@@ -320,6 +320,79 @@ impl TryFrom<(&str, &str, &str)> for SignupData {
     }
 }
 
+/// Данные для проверки пользователя
+///
+/// Используется при проверки аккаунта пользователя.
+/// Все поля проходят валидацию перед использованием.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default, Validate)]
+pub struct SigninData {
+    /// Email пользователя
+    ///
+    /// Должен быть валидным email адресом.
+    #[validate(email)]
+    pub email: String,
+
+    /// Пароль пользователя
+    ///
+    /// Должен соответствовать требованиям безопасности:
+    /// * 8-64 символа
+    /// * Содержать цифры, буквы в разных регистрах и специальные символы
+    /// * Не содержать пробелов
+    /// * Не быть распространённым паролем
+    #[validate(
+        length(
+            min = 8,
+            max = 64,
+            message = "Пароль должен содержать от 8 до 64 символов"
+        ),
+        custom(function = "validate_password")
+    )]
+    pub password: String,
+}
+
+impl SigninData {
+    /// Создает новый `SigninData` с валидацией входных данных
+    ///
+    /// # Аргументы
+    ///
+    /// * `email` - Email пользователя (будет приведен к нижнему регистру и обрезан)
+    /// * `password` - Пароль пользователя
+    ///
+    /// # Возвращает
+    ///
+    /// * `Ok(SigninData)` - если все данные валидны
+    /// * `Err(AppError::ValidationErrors)` - если данные не проходят валидацию
+    #[instrument(name = "try new signin data", skip(password))]
+    pub fn try_new(email: &str, password: &str) -> AppResult<Self> {
+        let res = Self {
+            email: email.trim().to_lowercase(),
+            password: password.to_string(),
+        };
+        match res.validate() {
+            Ok(_) => Ok(res),
+            Err(err) => Err(AppError::ValidationErrors(err)),
+        }
+    }
+}
+
+impl TryFrom<(&str, &str)> for SigninData {
+    type Error = AppError;
+
+    /// Создает `SigninData` из кортежа строк
+    ///
+    /// # Аргументы
+    ///
+    /// * `(email, password)` - Кортеж строк (email, пароль)
+    ///
+    /// # Возвращает
+    ///
+    /// * `Ok(SignupData)` - если все данные валидны
+    /// * `Err(AppError)` - если данные невалидны
+    fn try_from((email, password): (&str, &str)) -> Result<Self, Self::Error> {
+        Self::try_new(email, password)
+    }
+}
+
 /// Проверяет пароль на соответствие требованиям безопасности
 ///
 /// # Аргументы
@@ -813,6 +886,32 @@ mod tests {
         let guest_deserialized: UserRole = serde_json::from_str("\"Гость\"").unwrap();
         assert_eq!(guest_deserialized, UserRole::Guest);
     }
+    #[test]
+    fn test_signin_data_try_new() {
+        // Валидные данные
+        let signin = SigninData::try_new("test@example.com", "ValidPass123!");
+        assert!(signin.is_ok());
+
+        let signin_data = signin.unwrap();
+        assert_eq!(signin_data.email, "test@example.com");
+        assert_eq!(signin_data.password, "ValidPass123!");
+
+        // Email приводится к нижнему регистру и обрезается
+        let signin = SigninData::try_new("  TEST@EXAMPLE.COM  ", "ValidPass123!");
+        assert!(signin.is_ok());
+        assert_eq!(signin.unwrap().email, "test@example.com");
+
+        // Невалидный пароль (слишком короткий)
+        let signin = SigninData::try_new("test@example.com", "short");
+        assert!(signin.is_err());
+        assert!(matches!(signin.unwrap_err(), AppError::ValidationErrors(_)));
+    }
+
+    #[test]
+    fn test_signin_data_try_from() {
+        let signin = SigninData::try_from(("test@example.com", "ValidPass123!"));
+        assert!(signin.is_ok());
+    }
 
     #[test]
     fn test_signup_data_validation() {
@@ -837,6 +936,29 @@ mod tests {
             email: "test@example.com".to_string(),
             password: "short".to_string(),
             role: UserRole::Guest,
+        };
+        assert!(short_password.validate().is_err());
+    }
+    #[test]
+    fn test_signin_data_validation() {
+        // Валидные данные
+        let valid_signin = SigninData {
+            email: "test@example.com".to_string(),
+            password: "ValidPass123!".to_string(),
+        };
+        assert!(valid_signin.validate().is_ok());
+
+        // Невалидный email
+        let invalid_email = SigninData {
+            email: "not-an-email".to_string(),
+            password: "ValidPass123!".to_string(),
+        };
+        assert!(invalid_email.validate().is_err());
+
+        // Невалидный пароль (слишком короткий)
+        let short_password = SigninData {
+            email: "test@example.com".to_string(),
+            password: "short".to_string(),
         };
         assert!(short_password.validate().is_err());
     }

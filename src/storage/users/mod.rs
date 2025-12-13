@@ -1,7 +1,7 @@
 mod pg_users_repository;
 use crate::{
     AppResult,
-    models::{SignupData, User},
+    models::{SigninData, SignupData, User},
 };
 use async_trait::async_trait;
 
@@ -14,5 +14,5 @@ pub trait UsersRepository {
     async fn find_by_email(&self, email: &str) -> AppResult<User>;
     async fn update(&self, id: uuid::Uuid, user: User) -> AppResult<User>;
     async fn delete(&self, id: uuid::Uuid) -> AppResult<User>;
-    async fn verify_user(&self, signup_data: SignupData) -> AppResult<bool>;
+    async fn verify_user(&self, signin_data: SigninData) -> AppResult<bool>;
 }

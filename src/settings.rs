@@ -73,6 +73,8 @@ pub struct DatabaseSettings {
 
     /// Имя базы данных
     pub database: String,
+    pub max_connections: Option<u32>,
+    pub idle_timeout: Option<u64>,
 }
 
 impl DatabaseSettings {
@@ -92,6 +94,8 @@ impl DatabaseSettings {
     ///     username: "postgres".to_string(),
     ///     password: "password".to_string(),
     ///     database: "mydb".to_string(),
+    /// 	max_connections: None,
+    /// 	idle_timeout: None,
     /// };
     ///
     /// let url = db_settings.db_url();
@@ -173,6 +177,8 @@ mod tests {
             username: "postgres".to_string(),
             password: "mysecretpassword".to_string(),
             database: "mydatabase".to_string(),
+            max_connections: Some(16),
+            idle_timeout: Some(60),
         };
 
         let expected = "postgres://postgres:mysecretpassword@localhost:5432/mydatabase";
@@ -219,6 +225,8 @@ mod tests {
                 username: "user".to_string(),
                 password: "pass".to_string(),
                 database: "db".to_string(),
+                max_connections: None,
+                idle_timeout: None,
             },
             email_settings: EmailSettings {
                 host: "smtp.example.com".to_string(),
@@ -250,6 +258,8 @@ mod tests {
                 username: "user".to_string(),
                 password: "pass".to_string(),
                 database: "db".to_string(),
+                max_connections: Some(4),
+                idle_timeout: Some(90),
             },
             email_settings: EmailSettings {
                 host: "smtp.example.com".to_string(),
@@ -291,6 +301,8 @@ mod tests {
                 username: "user".to_string(),
                 password: password.to_string(),
                 database: "db".to_string(),
+                max_connections: None,
+                idle_timeout: None,
             };
 
             // Формат URL требует кодирования специальных символов
