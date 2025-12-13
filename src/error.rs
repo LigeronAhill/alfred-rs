@@ -1,6 +1,8 @@
 use thiserror::Error;
 use validator::{ValidationError, ValidationErrors};
 
+use crate::storage::UsersFilterBuilderError;
+
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Custom error message: {0}")]
@@ -25,6 +27,10 @@ pub enum AppError {
     ValidationErrors(#[from] ValidationErrors),
     #[error("Error while hashing {0}")]
     CryptoError(String),
+    #[error("Error parsing id {0}")]
+    UuidError(#[from] uuid::Error),
+    #[error("Error building struct {0}")]
+    BuilderError(#[from] UsersFilterBuilderError),
 }
 
 pub type AppResult<T> = Result<T, AppError>;

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use alfred::AppResult;
@@ -20,7 +21,8 @@ async fn main() -> AppResult<()> {
         ))
         .connect(db_url.as_ref())
         .await?;
-    let pg_storage = PgStorage::init(pool).await?;
+    let pg_storage = Arc::new(PgStorage::init(pool).await?);
+    let _users_service = alfred::services::UsersService::new(pg_storage.clone());
     pg_storage.close().await;
     Ok(())
 }

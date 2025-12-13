@@ -226,6 +226,18 @@ impl FromStr for UserRole {
     }
 }
 
+impl TryFrom<String> for UserRole {
+    type Error = AppError;
+    fn try_from(s: String) -> AppResult<Self> {
+        match s.to_lowercase().as_str() {
+            "владелец" | "owner" => Ok(UserRole::Owner),
+            "администратор" | "admin" => Ok(UserRole::Admin),
+            "сотрудник" | "employee" => Ok(UserRole::Employee),
+            "гость" | "guest" => Ok(UserRole::Guest),
+            _ => Err(AppError::InvalidUserRole(s.to_string())),
+        }
+    }
+}
 impl AsRef<str> for UserRole {
     /// Возвращает строковое представление роли на русском языке
     fn as_ref(&self) -> &str {
