@@ -14,6 +14,7 @@ use crate::{
 /// Предоставляет высокоуровневые операции над пользователями,
 /// такие как создание, аутентификация, поиск и управление пользователями.
 /// Инкапсулирует бизнес-логику и валидацию данных.
+#[derive(Clone)]
 pub struct UsersService {
     pub storage: Arc<dyn UsersRepository>,
 }
@@ -42,7 +43,7 @@ impl UsersService {
     ///
     /// * `Ok(User)` - Созданный пользователь
     /// * `Err(AppError)` - Ошибка валидации, парсинга роли или сохранения
-    pub async fn create(&self, email: &str, password: &str, role: Option<&str>) -> AppResult<User> {
+    pub async fn signup(&self, email: &str, password: &str, role: Option<&str>) -> AppResult<User> {
         let role = role
             .and_then(|r| UserRole::from_str(r).ok())
             .unwrap_or_default();
@@ -148,7 +149,7 @@ impl UsersService {
     /// * `Ok(User)` - Аутентифицированный пользователь
     /// * `Err(AppError::InvalidCredentials)` - Неверные учетные данные
     /// * `Err(AppError)` - Другие ошибки (валидация, поиск пользователя и т.д.)
-    pub async fn login(&self, email: &str, password: &str) -> AppResult<User> {
+    pub async fn signin(&self, email: &str, password: &str) -> AppResult<User> {
         let signin_data = SigninData::try_from((email, password))?;
         let is_verified = self.storage.verify_user(signin_data.clone()).await?;
         if is_verified {
@@ -441,7 +442,7 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         let result = service
-            .create("test@example.com", "p@sSword123", Some("Admin"))
+            .signup("test@example.com", "p@sSword123", Some("Admin"))
             .await;
 
         assert!(result.is_ok());
@@ -457,7 +458,7 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         let result = service
-            .create("test@example.com", "p@sSword123", None)
+            .signup("test@example.com", "p@sSword123", None)
             .await;
 
         assert!(result.is_ok());
@@ -472,7 +473,7 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         let result = service
-            .create("test@example.com", "p@sSword123", Some("InvalidRole"))
+            .signup("test@example.com", "p@sSword123", Some("InvalidRole"))
             .await;
 
         assert!(result.is_ok()); // Невалидная роль должна игнорироваться и использоваться роль по умолчанию
@@ -488,7 +489,7 @@ mod tests {
 
         // Создаем пользователя с валидным email
         let result = service
-            .create("valid@example.com", "p@sSword123", None)
+            .signup("valid@example.com", "p@sSword123", None)
             .await;
         assert!(result.is_ok());
 
@@ -760,12 +761,12 @@ mod tests {
 
         // Создаем пользователя
         let created = service
-            .create("user@example.com", "correct_p@sSword123", None)
+            .signup("user@example.com", "correct_p@sSword123", None)
             .await
             .unwrap();
 
         // Пытаемся войти
-        let result = service.login(&created.email, "correct_p@sSword123").await;
+        let result = service.signin(&created.email, "correct_p@sSword123").await;
 
         assert!(result.is_ok());
         let user = result.unwrap();
@@ -780,12 +781,14 @@ mod tests {
 
         // Создаем пользователя
         service
-            .create("user@example.com", "correct_p@sSword123", None)
+            .signup("user@example.com", "correct_p@sSword123", None)
             .await
             .unwrap();
 
         // Пытаемся войти с неправильным паролем
-        let result = service.login("user@example.com", "wrong_p@sSword123").await;
+        let result = service
+            .signin("user@example.com", "wrong_p@sSword123")
+            .await;
 
         assert!(result.is_err());
     }
@@ -797,7 +800,7 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         let result = service
-            .login("nonexistent@example.com", "p@sSword123")
+            .signin("nonexistent@example.com", "p@sSword123")
             .await;
         assert!(result.is_err());
     }
@@ -987,7 +990,7 @@ mod tests {
 
         // 1. Создаем пользователя
         let created = service
-            .create("integration@example.com", "p@sSword123", Some("Employee"))
+            .signup("integration@example.com", "p@sSword123", Some("Employee"))
             .await
             .unwrap();
 
@@ -1031,7 +1034,7 @@ mod tests {
 
         // 6. Входим в систему
         let login_result = service
-            .login("integration@example.com", "p@sSword123")
+            .signin("integration@example.com", "p@sSword123")
             .await
             .unwrap();
         assert_eq!(login_result.user_id, user_id);
@@ -1052,11 +1055,11 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         // Пустой email
-        let result = service.create("", "p@sSword123", None).await;
+        let result = service.signup("", "p@sSword123", None).await;
         assert!(result.is_err());
 
         // Пустой пароль
-        let result = service.create("test@example.com", "", None).await;
+        let result = service.signup("test@example.com", "", None).await;
         assert!(result.is_err());
 
         // Невалидный email для поиска

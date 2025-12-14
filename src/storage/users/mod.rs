@@ -19,7 +19,7 @@ pub const MAX_PER_PAGE: u32 = 100;
 /// Определяет контракт для операций с пользователями в базе данных.
 /// Все методы асинхронны и возвращают `AppResult<T>` для обработки ошибок.
 #[async_trait]
-pub trait UsersRepository {
+pub trait UsersRepository: Send + Sync {
     /// Создает нового пользователя в базе данных
     async fn create(&self, signup_data: SignupData) -> AppResult<User>;
     /// Получает пользователя по идентификатору

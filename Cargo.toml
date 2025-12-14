@@ -39,7 +39,16 @@ thiserror = "2.0.17"
 
 # server
 axum = "0.8.7"
-tower-http = { version = "0.6.8", features = ["trace", "timeout", "cors"] }
+tower-http = { version = "0.6.8", features = [
+	"trace",
+	"timeout",
+	"cors",
+	"catch-panic",
+	"request-id",
+	"compression-gzip",
+] }
+tower = "0.5.2"
+prometheus = "0.14.0"
 
 # requests
 reqwest = { version = "0.12.25", features = ["gzip", "json", "cookies"] }

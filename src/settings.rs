@@ -139,6 +139,9 @@ pub struct ServerSettings {
 
     /// Порт, на котором запускается сервер
     pub port: u16,
+
+    /// Хост, с которого доступны запросы
+    pub origin: Option<String>,
 }
 
 impl ServerSettings {
@@ -196,6 +199,7 @@ mod tests {
         let server_settings = ServerSettings {
             host: "0.0.0.0".to_string(),
             port: 3000,
+            origin: None,
         };
 
         assert_eq!(server_settings.server_address(), "0.0.0.0:3000");
@@ -203,6 +207,7 @@ mod tests {
         let server_settings = ServerSettings {
             host: "127.0.0.1".to_string(),
             port: 8080,
+            origin: None,
         };
 
         assert_eq!(server_settings.server_address(), "127.0.0.1:8080");
@@ -236,6 +241,7 @@ mod tests {
             server_settings: ServerSettings {
                 host: "0.0.0.0".to_string(),
                 port: 3000,
+                origin: None,
             },
         };
 
@@ -269,6 +275,7 @@ mod tests {
             server_settings: ServerSettings {
                 host: "0.0.0.0".to_string(),
                 port: 3000,
+                origin: None,
             },
         };
 
@@ -315,58 +322,3 @@ mod tests {
         }
     }
 }
-// use serde::Deserialize;
-// use std::borrow::Cow;
-// use tracing::instrument;
-
-// #[instrument(name = "initializing settings")]
-// pub fn init(file: &str) -> Settings {
-//     config::Config::builder()
-//         .add_source(config::File::with_name(file))
-//         .build()
-//         .expect("Failed to read config file 'settings.toml'")
-//         .try_deserialize()
-//         .expect("Failed to deserialize settings")
-// }
-
-// #[derive(Debug, Clone, Deserialize)]
-// pub struct Settings {
-//     pub database_settings: DatabaseSettings,
-//     pub email_settings: EmailSettings,
-//     pub server_settings: ServerSettings,
-// }
-
-// #[derive(Debug, Clone, Deserialize)]
-// pub struct DatabaseSettings {
-//     pub host: String,
-//     pub port: u16,
-//     pub username: String,
-//     pub password: String,
-//     pub database: String,
-// }
-// impl DatabaseSettings {
-//     #[instrument(name = "creating database url", skip(self))]
-//     pub fn db_url(&self) -> Cow<'static, str> {
-//         Cow::Owned(format!(
-//             "postgres://{user}:{pass}@{host}:{port}/{db}",
-//             user = self.username,
-//             pass = self.password,
-//             host = self.host,
-//             port = self.port,
-//             db = self.database
-//         ))
-//     }
-// }
-
-// #[derive(Debug, Clone, Deserialize)]
-// pub struct EmailSettings {
-//     pub host: String,
-//     pub username: String,
-//     pub password: String,
-// }
-
-// #[derive(Debug, Clone, Deserialize)]
-// pub struct ServerSettings {
-//     pub host: String,
-//     pub port: u16,
-// }

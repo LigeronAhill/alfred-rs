@@ -1,3 +1,4 @@
+use axum::{http::StatusCode, response::IntoResponse};
 use thiserror::Error;
 use validator::{ValidationError, ValidationErrors};
 
@@ -31,6 +32,26 @@ pub enum AppError {
     UuidError(#[from] uuid::Error),
     #[error("Error building struct {0}")]
     BuilderError(#[from] UsersFilterBuilderError),
+    // #[error("Tokio IO error {0}")]
+    // TokioIOError(#[from] tokio::io::Error),
+    #[error("IO error {0}")]
+    IOError(#[from] std::io::Error),
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            AppError::EntryNotFound => StatusCode::NOT_FOUND,
+            AppError::EntryAlreadyExists
+            | AppError::InvalidInput
+            | AppError::InvalidCredentials
+            | AppError::InvalidUserRole(_)
+            | AppError::ValidationError(_)
+            | AppError::ValidationErrors(_) => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, self.to_string()).into_response()
+    }
+}
