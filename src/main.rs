@@ -23,7 +23,8 @@ async fn main() -> AppResult<()> {
         .await?;
     let pg_storage = Arc::new(PgStorage::init(pool).await?);
     let users_service = Arc::new(alfred::services::UsersService::new(pg_storage.clone()));
-    let state = Arc::new(alfred::AppState::new(users_service));
+    let jwt_settings = settings.jwt();
+    let state = Arc::new(alfred::AppState::new(users_service, jwt_settings));
     let server = alfred::Server::new(settings.server_settings, state);
     if server.start().await.is_err() {
         pg_storage.close().await;

@@ -1,11 +1,27 @@
+pub mod middleware;
 mod routes;
 use std::sync::Arc;
 
-use crate::{AppError, AppResult, services::UsersService, settings::ServerSettings};
+pub const TOKEN: &str = "alfred-token";
+
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    AppError, AppResult,
+    services::UsersService,
+    settings::{JWTSettings, ServerSettings},
+};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenClaims {
+    pub sub: String,
+    pub iat: usize,
+    pub exp: usize,
+}
 
 pub struct Server {
     addr: String,
-    origin: Option<String>,
+    origin: String,
     state: Arc<AppState>,
 }
 impl Server {
@@ -35,10 +51,14 @@ impl Server {
 #[derive(Clone)]
 pub struct AppState {
     pub users_service: Arc<UsersService>,
+    pub jwt_settings: Arc<JWTSettings>,
 }
 impl AppState {
-    pub fn new(users_service: Arc<UsersService>) -> Self {
-        Self { users_service }
+    pub fn new(users_service: Arc<UsersService>, jwt_settings: Arc<JWTSettings>) -> Self {
+        Self {
+            users_service,
+            jwt_settings,
+        }
     }
 }
 async fn shutdown_signal() {
@@ -65,4 +85,10 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ErrorResponse {
+    pub status: &'static str,
+    pub message: String,
 }

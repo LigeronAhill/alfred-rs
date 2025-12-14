@@ -1,7 +1,7 @@
 mod pg_users_repository;
 use crate::{
     AppResult,
-    models::{SigninData, SignupData, User, UserRole},
+    models::{SigninData, SignupData, User, UserRole, UserToUpdate},
 };
 use async_trait::async_trait;
 use derive_builder::Builder;
@@ -31,7 +31,7 @@ pub trait UsersRepository: Send + Sync {
     /// Находит пользователя по email адресу
     async fn find_by_email(&self, email: &str) -> AppResult<User>;
     /// Обновляет данные пользователя
-    async fn update(&self, id: uuid::Uuid, user: User) -> AppResult<User>;
+    async fn update(&self, id: uuid::Uuid, user: UserToUpdate) -> AppResult<User>;
     /// Удаляет пользователя по идентификатору
     async fn delete(&self, id: uuid::Uuid) -> AppResult<User>;
     /// Проверяет правильность пароля пользователя

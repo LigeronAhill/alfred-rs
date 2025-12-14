@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::{
-    AppResult,
-    models::{SigninData, User, UserRole},
+    AppError, AppResult,
+    models::{SigninData, User, UserRole, UserToUpdate},
     storage::{DEFAULT_PAGE_NUM, DEFAULT_PER_PAGE, UsersFilter, UsersRepository},
 };
 
@@ -48,7 +48,13 @@ impl UsersService {
             .and_then(|r| UserRole::from_str(r).ok())
             .unwrap_or_default();
         let data = (email, password, role.as_ref()).try_into()?;
-        let new_user = self.storage.create(data).await?;
+        let new_user = self.storage.create(data).await.map_err(|e| {
+            if e.to_string().contains("duplicate key") {
+                AppError::EntryAlreadyExists
+            } else {
+                e
+            }
+        })?;
         Ok(new_user)
     }
     /// Получает пользователя по идентификатору
@@ -185,7 +191,7 @@ impl UsersService {
     ///
     /// * `Ok(User)` - Обновленный пользователь
     /// * `Err(AppError)` - Ошибка парсинга UUID или если пользователь не найден
-    pub async fn update(&self, id: &str, user: User) -> AppResult<User> {
+    pub async fn update(&self, id: &str, user: UserToUpdate) -> AppResult<User> {
         let user_id = uuid::Uuid::parse_str(id)?;
         let updated_user = self.storage.update(user_id, user).await?;
         Ok(updated_user)
@@ -374,12 +380,14 @@ mod tests {
                 .ok_or(AppError::EntryNotFound)
         }
 
-        async fn update(&self, id: Uuid, user: User) -> AppResult<User> {
+        async fn update(&self, id: Uuid, user: UserToUpdate) -> AppResult<User> {
             let mut users = self.users.lock().unwrap();
 
             if let Some(existing_user) = users.iter_mut().find(|u| u.user_id == id) {
-                *existing_user = user.clone();
-                Ok(user)
+                existing_user.email = user.email;
+                existing_user.role = user.role;
+                existing_user.info = user.info;
+                Ok(existing_user.clone())
             } else {
                 Err(AppError::EntryNotFound)
             }
@@ -861,7 +869,7 @@ mod tests {
         updated_user.role = UserRole::Admin;
 
         let result = service
-            .update(&user_id.to_string(), updated_user.clone())
+            .update(&user_id.to_string(), updated_user.clone().into())
             .await;
         assert!(result.is_ok());
         let updated = result.unwrap();
@@ -881,7 +889,9 @@ mod tests {
         let service = UsersService::new(Arc::new(test_repo));
 
         let user = create_test_user(Uuid::new_v4(), "test@example.com", UserRole::Guest, None);
-        let result = service.update(&Uuid::new_v4().to_string(), user).await;
+        let result = service
+            .update(&Uuid::new_v4().to_string(), user.into())
+            .await;
         assert!(result.is_err());
     }
 
@@ -1013,7 +1023,7 @@ mod tests {
         let mut updated_user = retrieved.clone();
         updated_user.info.username = Some("integration_user".to_string());
         let updated = service
-            .update(&user_id.to_string(), updated_user)
+            .update(&user_id.to_string(), updated_user.into())
             .await
             .unwrap();
         assert_eq!(updated.info.username, Some("integration_user".to_string()));
