@@ -12,7 +12,7 @@ use tracing::instrument;
 use crate::{
     AppError, AppResult,
     crypto::{hash_password, verify_password},
-    models::{SigninData, SignupData, User, UserInfo, UserRole},
+    models::{SigninData, SignupData, User, UserInfo, UserRole, UserToUpdate},
     storage::{PgStorage, UsersRepository, users::UsersFilter},
 };
 
@@ -249,17 +249,10 @@ impl UsersRepository for PgStorage {
     ///
     /// * `AppResult<User>` - Обновленного пользователя или ошибку
     #[instrument(name = "update user", skip(self, user))]
-    async fn update(&self, id: uuid::Uuid, user: User) -> AppResult<User> {
+    async fn update(&self, id: uuid::Uuid, user: UserToUpdate) -> AppResult<User> {
         let mut tx = self.pool.begin().await?;
         let updated_info = UserInfoDTO::update(&mut tx, id, &user.info).await?;
-        let updated_user = UserDTO::update(
-            &mut tx,
-            id,
-            &user.email,
-            &user.password_hash,
-            user.role.as_ref(),
-        )
-        .await?;
+        let updated_user = UserDTO::update(&mut tx, id, &user.email, user.role.as_ref()).await?;
         tx.commit().await?;
         let res = User::from((updated_user, updated_info.into()));
         Ok(res)
@@ -436,7 +429,6 @@ impl UserDTO {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         id: uuid::Uuid,
         email: &str,
-        password_hash: &str,
         role: &str,
     ) -> AppResult<Self> {
         let res = sqlx::query_as!(
@@ -445,15 +437,13 @@ impl UserDTO {
 			UPDATE users
 			SET
 				email = $2,
-				password_hash = $3,
-				role = $4,
+				role = $3,
 				updated = NOW()
 			WHERE user_id = $1
 			RETURNING *;
 			"#,
             id,
             email,
-            password_hash,
             role,
         )
         .fetch_optional(&mut **tx)
@@ -642,7 +632,7 @@ mod tests {
 
     use crate::{
         AppError, AppResult,
-        models::{SigninData, SignupData, User, UserInfo},
+        models::{SigninData, SignupData, UserInfo, UserToUpdate},
         storage::{PgStorage, UsersRepository, users::UsersFilter},
     };
     #[sqlx::test]
@@ -750,7 +740,7 @@ mod tests {
         let created = pg_users_repo.create(signup_data.clone()).await?;
 
         // Подготавливаем обновленные данные
-        let mut user_to_update = created.clone();
+        let mut user_to_update = crate::models::UserToUpdate::from(created.clone());
         user_to_update.email = "updated@example.com".to_string();
         user_to_update.role = crate::models::UserRole::Admin;
         user_to_update.info = UserInfo {
@@ -788,14 +778,10 @@ mod tests {
         let pg_users_repo = PgStorage::with_pool(pool);
 
         let non_existent_id = uuid::Uuid::new_v4();
-        let user = User {
-            user_id: non_existent_id,
+        let user = UserToUpdate {
             email: "test@example.com".to_string(),
-            password_hash: "hash".to_string(),
             role: crate::models::UserRole::Guest,
             info: UserInfo::default(),
-            created: chrono::Utc::now().naive_utc(),
-            updated: chrono::Utc::now().naive_utc(),
         };
 
         let result = pg_users_repo.update(non_existent_id, user).await;
@@ -818,7 +804,7 @@ mod tests {
         let created = pg_users_repo.create(signup_data.clone()).await?;
 
         // Добавляем информацию о пользователе
-        let mut user_with_info = created.clone();
+        let mut user_with_info = UserToUpdate::from(created.clone());
         user_with_info.info = UserInfo {
             username: Some("testuser".to_string()),
             ..Default::default()
@@ -1021,7 +1007,7 @@ mod tests {
         assert!(created.info.username.is_none());
 
         // Обновляем информацию
-        let mut updated_user = created.clone();
+        let mut updated_user = UserToUpdate::from(created.clone());
         updated_user.info = UserInfo {
             first_name: Some("Alice".to_string()),
             last_name: Some("Smith".to_string()),

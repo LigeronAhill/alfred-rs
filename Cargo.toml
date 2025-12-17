@@ -38,8 +38,18 @@ tracing-subscriber = "0.3.22"
 thiserror = "2.0.17"
 
 # server
-axum = "0.8.7"
-tower-http = { version = "0.6.8", features = ["trace", "timeout", "cors"] }
+axum = { version = "0.8.7", features = ["macros"] }
+axum-extra = { version = "0.12.2", features = ["cookie"] }
+jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
+tower-http = { version = "0.6.8", features = [
+	"trace",
+	"timeout",
+	"cors",
+	"catch-panic",
+	"request-id",
+	"compression-gzip",
+] }
+tower = "0.5.2"
 
 # requests
 reqwest = { version = "0.12.25", features = ["gzip", "json", "cookies"] }
@@ -68,3 +78,4 @@ http = "1.4.0"
 bytes = "1.11.0"
 log = "0.4.29"
 validator = { version = "0.20.0", features = ["derive"] }
+time = "0.3.44"

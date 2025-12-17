@@ -3,6 +3,8 @@ pub use error::{AppError, AppResult};
 pub mod crypto;
 pub mod logger;
 pub mod models;
+mod server;
+pub use server::{AppState, Server};
 pub mod services;
 pub mod settings;
 pub mod storage;

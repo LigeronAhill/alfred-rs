@@ -523,6 +523,22 @@ const fn is_special_char(c: char) -> bool {
     )
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default, Hash)]
+pub struct UserToUpdate {
+    pub email: String,
+    pub role: UserRole,
+    pub info: UserInfo,
+}
+impl From<User> for UserToUpdate {
+    fn from(value: User) -> Self {
+        Self {
+            email: value.email,
+            role: value.role,
+            info: value.info,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
